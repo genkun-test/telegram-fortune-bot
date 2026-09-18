@@ -26,7 +26,7 @@ ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 USER_DB = os.path.join(os.environ.get("DATA_DIR", "."), "users.json")
 JAPAN_TZ = ZoneInfo("Asia/Tokyo")
 FREE_DAILY_LIMIT = 3       # /today per day, free
-PREMIUM_DAILY_LIMIT = 5    # /today per day, premium (cost guard: Fable is expensive)
+PREMIUM_DAILY_LIMIT = 5    # /today per day, premium (cost guard)
 PREMIUM_STARS = 250        # price of a 30-day pass, in Telegram Stars (XTR)
 PREMIUM_DAYS = 30
 OWNER_IDS = {int(x) for x in os.environ.get("OWNER_IDS", "").replace(" ", "").split(",") if x}  # 無制限・プレミアム扱い
@@ -179,7 +179,7 @@ def generate_fortune(birth_date: str, lang: str, is_premium: bool = False, quest
     """Generate a personalized fortune in the user's language."""
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-    model = "claude-fable-5-1" if is_premium else "claude-haiku-4-5-20251001"
+    model = "claude-opus-5" if is_premium else "claude-haiku-4-5-20251001"
     today_str = datetime.now(JAPAN_TZ).strftime("%Y-%m-%d")
 
     if lang == "ja":
@@ -238,7 +238,7 @@ Style:
 
     kwargs = {}
     if is_premium:
-        # Fable thinks by default and thinking counts toward max_tokens; keep it light.
+        # Opus 5 thinks by default and thinking counts toward max_tokens; keep it light.
         kwargs["extra_body"] = {"output_config": {"effort": "low"}}
     message = client.messages.create(
         model=model,
