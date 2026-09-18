@@ -21,7 +21,7 @@ import anthropic
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]  # 未設定なら起動時に落とす（環境変数のみ）
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 
-USER_DB = "users.json"
+USER_DB = os.path.join(os.environ.get("DATA_DIR", "."), "users.json")
 JAPAN_TZ = ZoneInfo("Asia/Tokyo")
 SEND_HOUR = 7  # 各ユーザーの現地時間の朝7時
 DEFAULT_TZ = {"ja": "Asia/Tokyo", "en": "UTC"}

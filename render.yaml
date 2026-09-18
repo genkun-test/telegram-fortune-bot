@@ -5,9 +5,15 @@ services:
     plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: python telegram_fortune_bot.py
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.7
+      - key: DATA_DIR
+        value: /data
       - key: TELEGRAM_TOKEN
         sync: false
       - key: ANTHROPIC_API_KEY
