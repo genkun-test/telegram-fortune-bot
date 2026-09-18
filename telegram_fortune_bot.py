@@ -15,6 +15,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from telegram.error import TelegramError
 import anthropic
 import pytz
+from zoneinfo import ZoneInfo
 
 # ============================================================================
 # Configuration
@@ -26,9 +27,10 @@ ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 # Database file (simple JSON)
 USER_DB = "users.json"
 JAPAN_TZ = pytz.timezone("Asia/Tokyo")
-DAILY_SEND_TIME = time(7, 0)  # 7 AM JST
+DAILY_SEND_TIME = time(7, 0, tzinfo=ZoneInfo("Asia/Tokyo"))  # 7 AM JST
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)  # URLにBotトークンが含まれるためログに出さない
 logger = logging.getLogger(__name__)
 
 # ============================================================================
@@ -328,8 +330,7 @@ async def set_daily_task(app: Application):
     # Schedule for 7 AM JST every day
     job_queue.run_daily(
         scheduled_fortune,
-        time=DAILY_SEND_TIME,
-        tzinfo=JAPAN_TZ
+        time=DAILY_SEND_TIME
     )
 
 # ============================================================================
