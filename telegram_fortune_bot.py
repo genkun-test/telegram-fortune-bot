@@ -175,7 +175,7 @@ def user_lang(user: Optional[dict], update: Update) -> str:
 # Fortune Generation with Claude
 # ============================================================================
 
-def generate_fortune(birth_date: str, lang: str, is_premium: bool = False) -> str:
+def generate_fortune(birth_date: str, lang: str, is_premium: bool = False, question: str = "") -> str:
     """Generate a personalized fortune in the user's language."""
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
@@ -206,7 +206,8 @@ def generate_fortune(birth_date: str, lang: str, is_premium: bool = False) -> st
 - 断定的な予言や不安を煽る表現は避ける
 - Markdown記法（#、**、---）は使わず、プレーンテキストで書く
 
-{"(プレミアム版は、より深い分析と詳細なアドバイスを含めてください)" if is_premium else ""}"""
+{"(プレミアム版は、より深い分析と詳細なアドバイスを含めてください)" if is_premium else ""}
+{f"【ユーザーからの質問】{chr(10)}{question}{chr(10)}※まず占い師としてこの質問に具体的に答え、その後に上の6要素を簡潔にまとめてください。" if question else ""}"""
     else:
         prompt = f"""You are an experienced fortune teller. Give today's fortune based on the user's birth date.
 
@@ -232,14 +233,22 @@ Style:
 - Write in English
 - Plain text only: no Markdown (#, **, ---)
 
-{"(Premium: include deeper analysis and more detailed advice.)" if is_premium else ""}"""
+{"(Premium: include deeper analysis and more detailed advice.)" if is_premium else ""}
+{f"[User's question]{chr(10)}{question}{chr(10)}First answer this question concretely as a fortune teller, then cover the six points above briefly." if question else ""}"""
 
+    kwargs = {}
+    if is_premium:
+        # Fable thinks by default and thinking counts toward max_tokens; keep it light.
+        kwargs["extra_body"] = {"output_config": {"effort": "low"}}
     message = client.messages.create(
         model=model,
-        max_tokens=1024 if is_premium else 512,
-        messages=[{"role": "user", "content": prompt}]
+        max_tokens=2048 if is_premium else 512,
+        messages=[{"role": "user", "content": prompt}],
+        **kwargs,
     )
-    return message.content[0].text
+    u = message.usage
+    logger.info(f"usage model={model} in={u.input_tokens} out={u.output_tokens} stop={message.stop_reason}")
+    return next(b.text for b in message.content if b.type == "text")
 
 # ============================================================================
 # Telegram Bot Handlers
@@ -307,7 +316,8 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text(t(lang, "loading"))
 
     try:
-        fortune = await asyncio.to_thread(generate_fortune, user["birth_date"], lang, premium)
+        question = " ".join(context.args or [])[:300].strip()
+        fortune = await asyncio.to_thread(generate_fortune, user["birth_date"], lang, premium, question)
 
         keyboard = [[InlineKeyboardButton(t(lang, "btn_premium"), callback_data="premium")]]
         badge = t(lang, "badge_premium" if premium else "badge_free")
