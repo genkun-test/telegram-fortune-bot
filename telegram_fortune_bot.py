@@ -20,8 +20,8 @@ import pytz
 # Configuration
 # ============================================================================
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]  # 未設定なら起動時に落とす（環境変数のみ）
+ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 
 # Database file (simple JSON)
 USER_DB = "users.json"
@@ -87,7 +87,7 @@ def generate_fortune(birth_date: str, is_premium: bool = False) -> str:
     """
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-    model = "claude-3-5-fable-20241022" if is_premium else "claude-3-5-haiku-20241022"
+    model = "claude-fable-5-1" if is_premium else "claude-haiku-4-5-20251001"
 
     prompt = f"""あなたは経験豊かな占い師です。ユーザーの生年月日に基づいて、今日の運勢を占ってください。
 
@@ -229,7 +229,7 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"Error generating fortune: {e}")
-        await msg.edit_text(f"❌ エラーが発生しました: {str(e)}")
+        await msg.edit_text("❌ エラーが発生しました。しばらくしてからもう一度お試しください。")
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle button callbacks."""
