@@ -169,6 +169,7 @@ def generate_fortune(birth_date: str, lang: str, is_premium: bool = False) -> st
 - 前向きで希望的なメッセージ
 - 絵文字は適度に使用
 - 断定的な予言や不安を煽る表現は避ける
+- Markdown記法（#、**、---）は使わず、プレーンテキストで書く
 
 {"(プレミアム版は、より深い分析と詳細なアドバイスを含めてください)" if is_premium else ""}"""
     else:
@@ -194,6 +195,7 @@ Style:
 - Use emoji in moderation
 - Avoid absolute predictions or fear-inducing statements
 - Write in English
+- Plain text only: no Markdown (#, **, ---)
 
 {"(Premium: include deeper analysis and more detailed advice.)" if is_premium else ""}"""
 
