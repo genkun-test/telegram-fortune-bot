@@ -29,6 +29,7 @@ FREE_DAILY_LIMIT = 3       # /today per day, free
 PREMIUM_DAILY_LIMIT = 5    # /today per day, premium (cost guard: Fable is expensive)
 PREMIUM_STARS = 250        # price of a 30-day pass, in Telegram Stars (XTR)
 PREMIUM_DAYS = 30
+OWNER_IDS = {int(x) for x in os.environ.get("OWNER_IDS", "").replace(" ", "").split(",") if x}  # 無制限・プレミアム扱い
 SEND_HOUR = 7  # 各ユーザーの現地時間の朝7時
 DEFAULT_TZ = {"ja": "Asia/Tokyo", "en": "UTC"}
 TZ_CHOICES = [
@@ -151,7 +152,9 @@ def add_user(user_id: int, birth_date: str, lang: str):
 def get_user(user_id: int) -> Optional[dict]:
     return load_users().get(str(user_id))
 
-def is_premium(user: Optional[dict]) -> bool:
+def is_premium(user: Optional[dict], user_id: Optional[int] = None) -> bool:
+    if user_id in OWNER_IDS:
+        return True
     until = (user or {}).get("premium_until")
     return bool(until) and datetime.fromisoformat(until) > datetime.now()
 
@@ -247,7 +250,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = user_lang(user, update)
 
     if user:
-        status = t(lang, "status_premium" if is_premium(user) else "status_free")
+        status = t(lang, "status_premium" if is_premium(user, update.effective_user.id) else "status_free")
         await update.message.reply_text(t(lang, "welcome_back", birth=user["birth_date"], status=status))
         return
 
@@ -292,9 +295,9 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(t(lang, "need_start"))
         return
 
-    premium = is_premium(user)
+    premium = is_premium(user, user_id)
     limit = PREMIUM_DAILY_LIMIT if premium else FREE_DAILY_LIMIT
-    if used_today(user) >= limit:
+    if user_id not in OWNER_IDS and used_today(user) >= limit:
         if premium:
             await update.message.reply_text(t(lang, "limit_premium", n=limit))
         else:
@@ -366,6 +369,9 @@ async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Premium paid: user={update.effective_user.id} charge={pay.telegram_payment_charge_id}")
     await update.message.reply_text(t(user_lang(user, update), "paid", until=user["premium_until"][:10]))
 
+async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(str(update.effective_user.id))
+
 async def paysupport(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = user_lang(get_user(update.effective_user.id), update)
     if context.args:
@@ -436,6 +442,7 @@ def main():
     app.add_handler(CommandHandler("timezone", timezone_cmd))
     app.add_handler(CommandHandler("birthday", birthday_cmd))
     app.add_handler(CommandHandler("paysupport", paysupport))
+    app.add_handler(CommandHandler("myid", myid))
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, paid))
     app.add_handler(CallbackQueryHandler(timezone_pick, pattern="^tz:"))
