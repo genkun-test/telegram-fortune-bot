@@ -65,7 +65,7 @@ TEXTS = {
         "badge_free": "📌 無料版",
         "btn_premium": "⭐ プレミアム",
         "btn_no_question": "質問なしで占う",
-        "ask_question": "🔮 聞きたいことはありますか？\nメッセージで質問を送ってください（例: 明日なにをすべき？）。\n特になければ、下のボタンを押してください。",
+        "ask_question": "🔮 聞きたいことはありますか？\nメッセージで質問を送ってください（例: 今日の運勢は？）。\n特になければ、下のボタンを押してください。",
         "btn_cancel": "閉じる",
         "premium": "⭐ プレミアムプラン（{d}日パス / {s} Stars）\n\n🔮 より深い占い分析\n📊 詳細な運勢予測\n💫 ラッキーアイテムの詳しい説明\n🔁 /today は1日{p}回まで（無料は{f}回）\n\n下の請求書からお支払いください。自動更新はありません。",
         "tz_ask": "🕖 お住まいの時間帯を選んでください。毎朝7時（現地時間）に占いをお送りします。",
@@ -79,7 +79,7 @@ TEXTS = {
         "premium_active": "✨ プレミアム有効期限: {until}まで",
         "paid": "🎉 ありがとうございます！プレミアムが {until} まで有効になりました。",
         "paysupport": "お支払いに関するお問い合わせ: /paysupport の後ろに内容を書いて送ってください。返金の相談も受け付けます。",
-        "help": "📖 ヘルプ\n\n/start - 登録\n/today - 今日の占いを見る（例: /today 明日なにをすべき？ と質問も付けられます）\n/premium - プレミアム\n/birthday - 生年月日を変更\n/timezone - 配信の時間帯を変更\n/help - このメッセージ\n\n毎日朝7時（設定した時間帯）に、自動で占い結果をお送りします。\n※ 占いはエンターテインメントです。",
+        "help": "📖 ヘルプ\n\n/start - 登録\n/today - 今日の占いを見る（例: /today 今日の運勢は？ と質問も付けられます）\n/premium - プレミアム\n/birthday - 生年月日を変更\n/timezone - 配信の時間帯を変更\n/help - このメッセージ\n\n毎日朝7時（設定した時間帯）に、自動で占い結果をお送りします。\n※ 占いはエンターテインメントです。",
     },
     "en": {
         "welcome_back": "Welcome back! 👋\n\nBirth date on file: {birth}\nStatus: {status}\n\nCommands:\n/today - Today's fortune\n/premium - Premium\n/help - Help",
@@ -98,7 +98,7 @@ TEXTS = {
         "badge_free": "📌 Free",
         "btn_premium": "⭐ Premium",
         "btn_no_question": "No question, just read",
-        "ask_question": "🔮 Anything you'd like to ask?\nSend your question as a message (e.g. What should I do tomorrow?).\nIf not, tap the button below.",
+        "ask_question": "🔮 Anything you'd like to ask?\nSend your question as a message (e.g. How's my luck today?).\nIf not, tap the button below.",
         "btn_cancel": "Close",
         "premium": "⭐ Premium plan ({d}-day pass / {s} Stars)\n\n🔮 Deeper fortune analysis\n📊 Detailed forecasts\n💫 Lucky item guide\n🔁 Up to {p} /today readings a day (free: {f})\n\nPay with the invoice below. No auto-renewal.",
         "tz_ask": "🕖 Pick your time zone. I'll send your fortune every morning at 7:00 AM local time.",
@@ -112,7 +112,7 @@ TEXTS = {
         "premium_active": "✨ Premium active until {until}",
         "paid": "🎉 Thank you! Premium is active until {until}.",
         "paysupport": "Payment questions: send /paysupport followed by your message. Refund requests are welcome.",
-        "help": "📖 Help\n\n/start - Register\n/today - Today's fortune (add a question: /today what should I do tomorrow?)\n/premium - Premium\n/birthday - Change birth date\n/timezone - Change delivery time zone\n/help - This message\n\nA fortune is sent automatically every day at 7:00 AM in your time zone.\n* For entertainment purposes only.",
+        "help": "📖 Help\n\n/start - Register\n/today - Today's fortune (add a question: /today how's my luck today?)\n/premium - Premium\n/birthday - Change birth date\n/timezone - Change delivery time zone\n/help - This message\n\nA fortune is sent automatically every day at 7:00 AM in your time zone.\n* For entertainment purposes only.",
     },
 }
 
