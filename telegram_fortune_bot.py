@@ -5,13 +5,15 @@ Free tier: Haiku 4.5 | Premium tier: Fable 5.1
 
 import os
 import json
-from datetime import datetime
+import asyncio
+from datetime import datetime, timedelta
 from typing import Optional
 import logging
 from zoneinfo import ZoneInfo
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
+from telegram.ext import (Application, CommandHandler, MessageHandler, filters, ContextTypes,
+                          CallbackQueryHandler, PreCheckoutQueryHandler)
 import anthropic
 
 # ============================================================================
@@ -23,6 +25,10 @@ ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 
 USER_DB = os.path.join(os.environ.get("DATA_DIR", "."), "users.json")
 JAPAN_TZ = ZoneInfo("Asia/Tokyo")
+FREE_DAILY_LIMIT = 3       # /today per day, free
+PREMIUM_DAILY_LIMIT = 5    # /today per day, premium (cost guard: Fable is expensive)
+PREMIUM_STARS = 250        # price of a 30-day pass, in Telegram Stars (XTR)
+PREMIUM_DAYS = 30
 SEND_HOUR = 7  # 各ユーザーの現地時間の朝7時
 DEFAULT_TZ = {"ja": "Asia/Tokyo", "en": "UTC"}
 TZ_CHOICES = [
@@ -58,11 +64,18 @@ TEXTS = {
         "badge_free": "📌 無料版",
         "btn_premium": "⭐ プレミアム",
         "btn_cancel": "閉じる",
-        "premium": "⭐ プレミアムプラン\n\n現在準備中です。公開までお待ちください。\n\n【予定】\n🔮 より深い占い分析\n📊 詳細な運勢予測\n💫 ラッキーアイテムの詳しい説明",
+        "premium": "⭐ プレミアムプラン（{d}日パス / {s} Stars）\n\n🔮 より深い占い分析\n📊 詳細な運勢予測\n💫 ラッキーアイテムの詳しい説明\n🔁 /today は1日{p}回まで（無料は{f}回）\n\n下の請求書からお支払いください。自動更新はありません。",
         "tz_ask": "🕖 お住まいの時間帯を選んでください。毎朝7時（現地時間）に占いをお送りします。",
         "tz_set": "✅ 時間帯を {tz} に設定しました。",
         "birth_updated": "✅ 生年月日を {birth} に更新しました。",
         "closed": "閉じました。",
+        "limit_free": "🔒 本日の無料枠（{n}回）を使い切りました。\n明日また占えます。プレミアムなら1日{p}回まで、より深い占いが使えます → /premium",
+        "limit_premium": "🔒 本日の上限（{n}回）に達しました。明日またどうぞ。",
+        "invoice_title": "プレミアム {d}日パス",
+        "invoice_desc": "より深い占い分析と詳細なアドバイス。1日{p}回まで /today が使えます。自動更新はありません。",
+        "premium_active": "✨ プレミアム有効期限: {until}まで",
+        "paid": "🎉 ありがとうございます！プレミアムが {until} まで有効になりました。",
+        "paysupport": "お支払いに関するお問い合わせ: /paysupport の後ろに内容を書いて送ってください。返金の相談も受け付けます。",
         "help": "📖 ヘルプ\n\n/start - 登録\n/today - 今日の占いを見る\n/premium - プレミアム\n/birthday - 生年月日を変更\n/timezone - 配信の時間帯を変更\n/help - このメッセージ\n\n毎日朝7時（設定した時間帯）に、自動で占い結果をお送りします。\n※ 占いはエンターテインメントです。",
     },
     "en": {
@@ -82,11 +95,18 @@ TEXTS = {
         "badge_free": "📌 Free",
         "btn_premium": "⭐ Premium",
         "btn_cancel": "Close",
-        "premium": "⭐ Premium plan\n\nComing soon.\n\n[Planned]\n🔮 Deeper fortune analysis\n📊 Detailed forecasts\n💫 Lucky item guide",
+        "premium": "⭐ Premium plan ({d}-day pass / {s} Stars)\n\n🔮 Deeper fortune analysis\n📊 Detailed forecasts\n💫 Lucky item guide\n🔁 Up to {p} /today readings a day (free: {f})\n\nPay with the invoice below. No auto-renewal.",
         "tz_ask": "🕖 Pick your time zone. I'll send your fortune every morning at 7:00 AM local time.",
         "tz_set": "✅ Time zone set to {tz}.",
         "birth_updated": "✅ Birth date updated to {birth}.",
         "closed": "Closed.",
+        "limit_free": "🔒 You've used today's free readings ({n}). Come back tomorrow, or go Premium for up to {p} deeper readings a day → /premium",
+        "limit_premium": "🔒 You've reached today's limit ({n}). Please come back tomorrow.",
+        "invoice_title": "Premium {d}-day pass",
+        "invoice_desc": "Deeper fortune analysis and detailed advice. Up to {p} /today readings a day. No auto-renewal.",
+        "premium_active": "✨ Premium active until {until}",
+        "paid": "🎉 Thank you! Premium is active until {until}.",
+        "paysupport": "Payment questions: send /paysupport followed by your message. Refund requests are welcome.",
         "help": "📖 Help\n\n/start - Register\n/today - Today's fortune\n/premium - Premium\n/birthday - Change birth date\n/timezone - Change delivery time zone\n/help - This message\n\nA fortune is sent automatically every day at 7:00 AM in your time zone.\n* For entertainment purposes only.",
     },
 }
@@ -112,7 +132,7 @@ def save_users(users: dict):
     with open(USER_DB, "w", encoding="utf-8") as f:
         json.dump(users, f, ensure_ascii=False, indent=2)
 
-def add_user(user_id: int, birth_date: str, lang: str, is_premium: bool = False):
+def add_user(user_id: int, birth_date: str, lang: str):
     """Create a user, or update the birth date of an existing one (keeps tz/premium/lang)."""
     users = load_users()
     prev = users.get(str(user_id), {})
@@ -121,14 +141,26 @@ def add_user(user_id: int, birth_date: str, lang: str, is_premium: bool = False)
         "lang": prev.get("lang", lang),
         "tz": prev.get("tz", DEFAULT_TZ[lang]),
         "last_daily": prev.get("last_daily"),
-        "is_premium": prev.get("is_premium", is_premium),
         "registered_at": prev.get("registered_at", datetime.now().isoformat()),
-        "last_fortune": prev.get("last_fortune")
+        "last_fortune": prev.get("last_fortune"),
+        "premium_until": prev.get("premium_until"),
+        "usage": prev.get("usage"),
     }
     save_users(users)
 
 def get_user(user_id: int) -> Optional[dict]:
     return load_users().get(str(user_id))
+
+def is_premium(user: Optional[dict]) -> bool:
+    until = (user or {}).get("premium_until")
+    return bool(until) and datetime.fromisoformat(until) > datetime.now()
+
+def user_today(user: dict) -> str:
+    return datetime.now(ZoneInfo(user.get("tz") or DEFAULT_TZ[user.get("lang") or "ja"])).date().isoformat()
+
+def used_today(user: dict) -> int:
+    u = user.get("usage") or {}
+    return u.get("count", 0) if u.get("date") == user_today(user) else 0
 
 def user_lang(user: Optional[dict], update: Update) -> str:
     """Stored language wins; otherwise infer from the Telegram client."""
@@ -215,7 +247,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = user_lang(user, update)
 
     if user:
-        status = t(lang, "status_premium" if user["is_premium"] else "status_free")
+        status = t(lang, "status_premium" if is_premium(user) else "status_free")
         await update.message.reply_text(t(lang, "welcome_back", birth=user["birth_date"], status=status))
         return
 
@@ -238,7 +270,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         existing = get_user(update.effective_user.id)
         lang = pick_lang(update.effective_user.language_code)
-        add_user(update.effective_user.id, text, lang, is_premium=False)
+        add_user(update.effective_user.id, text, lang)
         user = get_user(update.effective_user.id)
         if existing:
             await update.message.reply_text(t(user["lang"], "birth_updated", birth=text))
@@ -260,13 +292,22 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(t(lang, "need_start"))
         return
 
+    premium = is_premium(user)
+    limit = PREMIUM_DAILY_LIMIT if premium else FREE_DAILY_LIMIT
+    if used_today(user) >= limit:
+        if premium:
+            await update.message.reply_text(t(lang, "limit_premium", n=limit))
+        else:
+            await update.message.reply_text(t(lang, "limit_free", n=limit, p=PREMIUM_DAILY_LIMIT))
+        return
+
     msg = await update.message.reply_text(t(lang, "loading"))
 
     try:
-        fortune = generate_fortune(user["birth_date"], lang, user["is_premium"])
+        fortune = await asyncio.to_thread(generate_fortune, user["birth_date"], lang, premium)
 
         keyboard = [[InlineKeyboardButton(t(lang, "btn_premium"), callback_data="premium")]]
-        badge = t(lang, "badge_premium" if user["is_premium"] else "badge_free")
+        badge = t(lang, "badge_premium" if premium else "badge_free")
         text = (
             f"{t(lang, 'title_today', name=update.effective_user.first_name)}\n"
             f"{datetime.now(JAPAN_TZ).strftime(t(lang, 'date_fmt'))}\n\n"
@@ -275,7 +316,9 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
         users = load_users()
-        users[str(user_id)]["last_fortune"] = datetime.now().isoformat()
+        me = users[str(user_id)]
+        me["last_fortune"] = datetime.now().isoformat()
+        me["usage"] = {"date": user_today(me), "count": used_today(me) + 1}
         save_users(users)
 
     except Exception as e:
@@ -283,14 +326,51 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text(t(lang, "error"))
 
 async def premium_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Shared by /premium and the premium button."""
+    """Shared by /premium and the premium button: pitch + Stars invoice."""
     if update.callback_query:
         await update.callback_query.answer()
-        message_target = update.callback_query.message
+        target = update.callback_query.message
     else:
-        message_target = update.message
+        target = update.message
+    user = get_user(update.effective_user.id)
+    lang = user_lang(user, update)
+    if is_premium(user):
+        await target.reply_text(t(lang, "premium_active", until=user["premium_until"][:10]))
+    await target.reply_text(t(lang, "premium", d=PREMIUM_DAYS, s=PREMIUM_STARS, p=PREMIUM_DAILY_LIMIT, f=FREE_DAILY_LIMIT))
+    await context.bot.send_invoice(
+        chat_id=target.chat_id,
+        title=t(lang, "invoice_title", d=PREMIUM_DAYS),
+        description=t(lang, "invoice_desc", d=PREMIUM_DAYS, p=PREMIUM_DAILY_LIMIT),
+        payload="premium30",
+        provider_token="",  # Telegram Stars needs no provider token
+        currency="XTR",
+        prices=[LabeledPrice(t(lang, "invoice_title", d=PREMIUM_DAYS), PREMIUM_STARS)],
+    )
+
+async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.pre_checkout_query
+    ok = q.invoice_payload == "premium30" and get_user(q.from_user.id) is not None
+    await q.answer(ok=ok, error_message=None if ok else "Please register with /start first.")
+
+async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    pay = update.message.successful_payment
+    users = load_users()
+    user = users.get(str(update.effective_user.id))
+    if not user:
+        logger.error(f"Payment from unregistered user {update.effective_user.id}: {pay.telegram_payment_charge_id}")
+        return
+    now = datetime.now()
+    base = max(now, datetime.fromisoformat(user["premium_until"])) if user.get("premium_until") else now
+    user["premium_until"] = (base + timedelta(days=PREMIUM_DAYS)).isoformat()
+    save_users(users)
+    logger.info(f"Premium paid: user={update.effective_user.id} charge={pay.telegram_payment_charge_id}")
+    await update.message.reply_text(t(user_lang(user, update), "paid", until=user["premium_until"][:10]))
+
+async def paysupport(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = user_lang(get_user(update.effective_user.id), update)
-    await message_target.reply_text(t(lang, "premium"))
+    if context.args:
+        logger.info(f"PAYSUPPORT from {update.effective_user.id}: {' '.join(context.args)}")
+    await update.message.reply_text(t(lang, "paysupport"))
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = user_lang(get_user(update.effective_user.id), update)
@@ -306,7 +386,7 @@ async def scheduled_fortune(context: ContextTypes.DEFAULT_TYPE):
             local = datetime.now(ZoneInfo(user_data.get("tz") or DEFAULT_TZ[lang]))
             if local.hour != SEND_HOUR or user_data.get("last_daily") == local.date().isoformat():
                 continue
-            fortune = generate_fortune(user_data["birth_date"], lang, user_data["is_premium"])
+            fortune = await asyncio.to_thread(generate_fortune, user_data["birth_date"], lang, is_premium(user_data))
             text = (
                 f"{t(lang, 'title_daily')}\n"
                 f"{local.strftime(t(lang, 'date_fmt'))}\n\n"
@@ -355,6 +435,9 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("timezone", timezone_cmd))
     app.add_handler(CommandHandler("birthday", birthday_cmd))
+    app.add_handler(CommandHandler("paysupport", paysupport))
+    app.add_handler(PreCheckoutQueryHandler(precheckout))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, paid))
     app.add_handler(CallbackQueryHandler(timezone_pick, pattern="^tz:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(CallbackQueryHandler(premium_info, pattern="^premium$"))
