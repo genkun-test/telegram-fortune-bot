@@ -77,7 +77,7 @@ TEXTS = {
         "premium_active": "✨ プレミアム有効期限: {until}まで",
         "paid": "🎉 ありがとうございます！プレミアムが {until} まで有効になりました。",
         "paysupport": "お支払いに関するお問い合わせ: /paysupport の後ろに内容を書いて送ってください。返金の相談も受け付けます。",
-        "help": "📖 ヘルプ\n\n/start - 登録\n/today - 今日の占いを見る\n/premium - プレミアム\n/birthday - 生年月日を変更\n/timezone - 配信の時間帯を変更\n/help - このメッセージ\n\n毎日朝7時（設定した時間帯）に、自動で占い結果をお送りします。\n※ 占いはエンターテインメントです。",
+        "help": "📖 ヘルプ\n\n/start - 登録\n/today - 今日の占いを見る（例: /today 明日なにをすべき？ と質問も付けられます）\n/premium - プレミアム\n/birthday - 生年月日を変更\n/timezone - 配信の時間帯を変更\n/help - このメッセージ\n\n毎日朝7時（設定した時間帯）に、自動で占い結果をお送りします。\n※ 占いはエンターテインメントです。",
     },
     "en": {
         "welcome_back": "Welcome back! 👋\n\nBirth date on file: {birth}\nStatus: {status}\n\nCommands:\n/today - Today's fortune\n/premium - Premium\n/help - Help",
@@ -108,7 +108,7 @@ TEXTS = {
         "premium_active": "✨ Premium active until {until}",
         "paid": "🎉 Thank you! Premium is active until {until}.",
         "paysupport": "Payment questions: send /paysupport followed by your message. Refund requests are welcome.",
-        "help": "📖 Help\n\n/start - Register\n/today - Today's fortune\n/premium - Premium\n/birthday - Change birth date\n/timezone - Change delivery time zone\n/help - This message\n\nA fortune is sent automatically every day at 7:00 AM in your time zone.\n* For entertainment purposes only.",
+        "help": "📖 Help\n\n/start - Register\n/today - Today's fortune (add a question: /today what should I do tomorrow?)\n/premium - Premium\n/birthday - Change birth date\n/timezone - Change delivery time zone\n/help - This message\n\nA fortune is sent automatically every day at 7:00 AM in your time zone.\n* For entertainment purposes only.",
     },
 }
 
