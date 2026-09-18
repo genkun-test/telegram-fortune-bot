@@ -368,9 +368,29 @@ async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_users(users)
     logger.info(f"Premium paid: user={update.effective_user.id} charge={pay.telegram_payment_charge_id}")
     await update.message.reply_text(t(user_lang(user, update), "paid", until=user["premium_until"][:10]))
+    for oid in OWNER_IDS:
+        try:
+            await context.bot.send_message(oid, f"💰 paid: user={update.effective_user.id} charge={pay.telegram_payment_charge_id}")
+        except Exception:
+            pass
 
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(str(update.effective_user.id))
+
+async def refund(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Owner only: /refund <user_id> <charge_id> returns the Stars and clears premium."""
+    if update.effective_user.id not in OWNER_IDS or len(context.args) != 2:
+        return
+    uid, charge = int(context.args[0]), context.args[1]
+    try:
+        await context.bot.refund_star_payment(user_id=uid, telegram_payment_charge_id=charge)
+        users = load_users()
+        if str(uid) in users:
+            users[str(uid)]["premium_until"] = None
+            save_users(users)
+        await update.message.reply_text("refunded")
+    except Exception as e:
+        await update.message.reply_text(f"refund failed: {e}")
 
 async def paysupport(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = user_lang(get_user(update.effective_user.id), update)
@@ -443,6 +463,7 @@ def main():
     app.add_handler(CommandHandler("birthday", birthday_cmd))
     app.add_handler(CommandHandler("paysupport", paysupport))
     app.add_handler(CommandHandler("myid", myid))
+    app.add_handler(CommandHandler("refund", refund))
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, paid))
     app.add_handler(CallbackQueryHandler(timezone_pick, pattern="^tz:"))
