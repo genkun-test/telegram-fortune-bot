@@ -57,6 +57,7 @@ TEXTS = {
         "bad_format": "❌ 形式が正しくありません。\nYYYY-MM-DD または YYYY-MM-DD HH:MM で入力してください。",
         "need_start": "❌ まず /start で登録してください。",
         "loading": "🔮 占い中...",
+        "loading_premium": "🔮 占い中...\n✨ プレミアムは深く分析するため、少し時間がかかります（10〜30秒ほど）",
         "error": "❌ エラーが発生しました。しばらくしてからもう一度お試しください。",
         "title_today": "✨ {name}さんの今日の占い",
         "title_daily": "✨ 今日の占い",
@@ -90,6 +91,7 @@ TEXTS = {
         "bad_format": "❌ Invalid format.\nPlease use YYYY-MM-DD or YYYY-MM-DD HH:MM.",
         "need_start": "❌ Please register with /start first.",
         "loading": "🔮 Reading the stars...",
+        "loading_premium": "🔮 Reading the stars...\n✨ Premium does a deeper analysis, so it takes a little longer (about 10-30 seconds).",
         "error": "❌ Something went wrong. Please try again later.",
         "title_today": "✨ {name}'s fortune for today",
         "title_daily": "✨ Today's fortune",
@@ -243,10 +245,10 @@ Style:
     kwargs = {}
     if is_premium:
         # Opus 5 thinks by default and thinking counts toward max_tokens; keep it light.
-        kwargs["extra_body"] = {"output_config": {"effort": "low"}}
+        kwargs["extra_body"] = {"output_config": {"effort": "low"}, "thinking": {"type": "disabled"}}
     message = client.messages.create(
         model=model,
-        max_tokens=2048 if is_premium else 512,
+        max_tokens=1024 if is_premium else 512,
         messages=[{"role": "user", "content": prompt}],
         **kwargs,
     )
@@ -350,7 +352,7 @@ async def run_today(target, update: Update, question: str):
                                   n=PREMIUM_DAILY_LIMIT if premium else FREE_DAILY_LIMIT, p=PREMIUM_DAILY_LIMIT))
         return
 
-    msg = await target.reply_text(t(lang, "loading"))
+    msg = await target.reply_text(t(lang, "loading_premium" if premium else "loading"))
 
     try:
         fortune = await asyncio.to_thread(generate_fortune, user["birth_date"], lang, premium, question)
