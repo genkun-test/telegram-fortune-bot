@@ -212,7 +212,7 @@ def generate_fortune(birth_date: str, lang: str, is_premium: bool = False, quest
 - 断定的な予言や不安を煽る表現は避ける
 - Markdown記法（#、**、---）は使わず、プレーンテキストで書く
 
-{"(プレミアム版は、より深い分析と詳細なアドバイスを含めてください)" if is_premium else ""}
+{"(プレミアム版は、より深い分析と詳細なアドバイスを含めてください。ただし全体で1000文字以内に収め、必ず最後まで書き切ること)" if is_premium else ""}
 {f"【ユーザーからの質問】{chr(10)}{question}{chr(10)}※まず占い師としてこの質問に具体的に答え、その後に上の6要素を簡潔にまとめてください。" if question else ""}"""
     else:
         prompt = f"""You are an experienced fortune teller. Give today's fortune based on the user's birth date.
@@ -239,7 +239,7 @@ Style:
 - Write in English
 - Plain text only: no Markdown (#, **, ---)
 
-{"(Premium: include deeper analysis and more detailed advice.)" if is_premium else ""}
+{"(Premium: include deeper analysis and more detailed advice, but keep the whole reply under 300 words and always finish it.)" if is_premium else ""}
 {f"[User's question]{chr(10)}{question}{chr(10)}First answer this question concretely as a fortune teller, then cover the six points above briefly." if question else ""}"""
 
     kwargs = {}
@@ -248,7 +248,7 @@ Style:
         kwargs["extra_body"] = {"output_config": {"effort": "low"}, "thinking": {"type": "disabled"}}
     message = client.messages.create(
         model=model,
-        max_tokens=1024 if is_premium else 512,
+        max_tokens=2048 if is_premium else 512,
         messages=[{"role": "user", "content": prompt}],
         **kwargs,
     )
