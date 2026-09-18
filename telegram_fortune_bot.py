@@ -64,6 +64,8 @@ TEXTS = {
         "badge_premium": "🌟 プレミアム版",
         "badge_free": "📌 無料版",
         "btn_premium": "⭐ プレミアム",
+        "btn_no_question": "質問なしで占う",
+        "ask_question": "🔮 聞きたいことはありますか？\nメッセージで質問を送ってください（例: 明日なにをすべき？）。\n特になければ、下のボタンを押してください。",
         "btn_cancel": "閉じる",
         "premium": "⭐ プレミアムプラン（{d}日パス / {s} Stars）\n\n🔮 より深い占い分析\n📊 詳細な運勢予測\n💫 ラッキーアイテムの詳しい説明\n🔁 /today は1日{p}回まで（無料は{f}回）\n\n下の請求書からお支払いください。自動更新はありません。",
         "tz_ask": "🕖 お住まいの時間帯を選んでください。毎朝7時（現地時間）に占いをお送りします。",
@@ -95,6 +97,8 @@ TEXTS = {
         "badge_premium": "🌟 Premium",
         "badge_free": "📌 Free",
         "btn_premium": "⭐ Premium",
+        "btn_no_question": "No question, just read",
+        "ask_question": "🔮 Anything you'd like to ask?\nSend your question as a message (e.g. What should I do tomorrow?).\nIf not, tap the button below.",
         "btn_cancel": "Close",
         "premium": "⭐ Premium plan ({d}-day pass / {s} Stars)\n\n🔮 Deeper fortune analysis\n📊 Detailed forecasts\n💫 Lucky item guide\n🔁 Up to {p} /today readings a day (free: {f})\n\nPay with the invoice below. No auto-renewal.",
         "tz_ask": "🕖 Pick your time zone. I'll send your fortune every morning at 7:00 AM local time.",
@@ -270,6 +274,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     lang = user_lang(get_user(update.effective_user.id), update)
 
+    asked_at = context.user_data.pop("awaiting_question", None)
+    if asked_at and not context.user_data.get("awaiting_birthdate") and datetime.now().timestamp() - asked_at < 600:
+        if get_user(update.effective_user.id):
+            await run_today(update.message, update, text[:300])
+        return
+
     if context.user_data.get("awaiting_birthdate"):
         try:
             if len(text.split()) == 1:
@@ -313,10 +323,36 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(t(lang, "limit_free", n=limit, p=PREMIUM_DAILY_LIMIT))
         return
 
-    msg = await update.message.reply_text(t(lang, "loading"))
+    question = " ".join(context.args or [])[:300].strip()
+    if question:
+        await run_today(update.message, update, question)
+        return
+
+    # Bare /today: ask before spending a reading (the command menu makes it easy to tap by accident).
+    context.user_data["awaiting_question"] = datetime.now().timestamp()
+    keyboard = [[InlineKeyboardButton(t(lang, "btn_no_question"), callback_data="today_go")]]
+    await update.message.reply_text(t(lang, "ask_question"), reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def today_go(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Button: read the fortune without a question."""
+    await update.callback_query.answer()
+    context.user_data.pop("awaiting_question", None)
+    await update.callback_query.message.edit_reply_markup(reply_markup=None)
+    await run_today(update.callback_query.message, update, "")
+
+async def run_today(target, update: Update, question: str):
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    lang = user_lang(user, update)
+    premium = is_premium(user, user_id)
+    if user_id not in OWNER_IDS and used_today(user) >= (PREMIUM_DAILY_LIMIT if premium else FREE_DAILY_LIMIT):
+        await target.reply_text(t(lang, "limit_premium" if premium else "limit_free",
+                                  n=PREMIUM_DAILY_LIMIT if premium else FREE_DAILY_LIMIT, p=PREMIUM_DAILY_LIMIT))
+        return
+
+    msg = await target.reply_text(t(lang, "loading"))
 
     try:
-        question = " ".join(context.args or [])[:300].strip()
         fortune = await asyncio.to_thread(generate_fortune, user["birth_date"], lang, premium, question)
 
         keyboard = [[InlineKeyboardButton(t(lang, "btn_premium"), callback_data="premium")]]
@@ -479,6 +515,7 @@ def main():
     app.add_handler(CallbackQueryHandler(timezone_pick, pattern="^tz:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(CallbackQueryHandler(premium_info, pattern="^premium$"))
+    app.add_handler(CallbackQueryHandler(today_go, pattern="^today_go$"))
 
     app.post_init = set_daily_task
 
