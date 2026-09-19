@@ -356,11 +356,12 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(t(lang, "need_start"))
         return
 
-    if user_id not in OWNER_IDS and global_used_today() >= GLOBAL_DAILY_LIMIT:
+    premium = is_premium(user, user_id)
+    # 天井は無料枠だけに掛ける。プレミアムは支払いで回数が縛られているので、荒らしの巻き添えにしない。
+    if not premium and global_used_today() >= GLOBAL_DAILY_LIMIT:
         await update.message.reply_text(t(lang, "limit_global"))
         return
 
-    premium = is_premium(user, user_id)
     limit = PREMIUM_DAILY_LIMIT if premium else FREE_DAILY_LIMIT
     if user_id not in OWNER_IDS and used_today(user) >= limit:
         if premium:
@@ -391,7 +392,7 @@ async def run_today(target, update: Update, question: str):
     user = get_user(user_id)
     lang = user_lang(user, update)
     premium = is_premium(user, user_id)
-    if user_id not in OWNER_IDS and global_used_today() >= GLOBAL_DAILY_LIMIT:
+    if not premium and global_used_today() >= GLOBAL_DAILY_LIMIT:
         await target.reply_text(t(lang, "limit_global"))
         return
     if user_id not in OWNER_IDS and used_today(user) >= (PREMIUM_DAILY_LIMIT if premium else FREE_DAILY_LIMIT):
@@ -509,9 +510,9 @@ async def scheduled_fortune(context: ContextTypes.DEFAULT_TYPE):
             if local.hour != SEND_HOUR or user_data.get("last_daily") == local.date().isoformat():
                 continue
             # 登録は誰でもできるので、朝の一斉送信も同じ天井の下に置く。
-            if global_used_today() >= GLOBAL_DAILY_LIMIT:
-                logger.warning("global daily limit reached; skipping the rest of the broadcast")
-                break
+            if not is_premium(user_data) and global_used_today() >= GLOBAL_DAILY_LIMIT:
+                logger.warning("global daily limit reached; skipping free broadcast to %s", user_id_str)
+                continue
             fortune = await asyncio.to_thread(generate_fortune, user_data["birth_date"], lang, is_premium(user_data))
             global_bump()
             text = (
