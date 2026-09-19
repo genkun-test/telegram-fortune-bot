@@ -30,6 +30,9 @@ PREMIUM_DAILY_LIMIT = 5    # /today per day, premium (cost guard)
 PREMIUM_STARS = 250        # price of a 30-day pass, in Telegram Stars (XTR)
 PREMIUM_DAYS = 30
 OWNER_IDS = {int(x) for x in os.environ.get("OWNER_IDS", "").replace(" ", "").split(",") if x}  # 無制限・プレミアム扱い
+# 全ユーザー合計の上限。1人あたりの上限はアカウントを増やせば回避できるので、API 課金の天井はこちらで持つ。
+GLOBAL_DAILY_LIMIT = int(os.environ.get("GLOBAL_DAILY_LIMIT", "300"))
+GLOBAL_DB = os.path.join(os.environ.get("DATA_DIR", "."), "global_usage.json")
 SEND_HOUR = 7  # 各ユーザーの現地時間の朝7時
 DEFAULT_TZ = {"ja": "Asia/Tokyo", "en": "UTC"}
 TZ_CHOICES = [
@@ -75,6 +78,7 @@ TEXTS = {
         "closed": "閉じました。",
         "limit_free": "🔒 本日の無料枠（{n}回）を使い切りました。\n明日また占えます。プレミアムなら1日{p}回まで、より深い占いが使えます → /premium",
         "limit_premium": "🔒 本日の上限（{n}回）に達しました。明日またどうぞ。",
+        "limit_global": "🌙 本日の占いは受付を終了しました。日付が変わったらまたお越しください。",
         "invoice_title": "プレミアム {d}日パス",
         "invoice_desc": "より深い占い分析と詳細なアドバイス。1日{p}回まで /today が使えます。自動更新はありません。",
         "premium_active": "✨ プレミアム有効期限: {until}まで",
@@ -109,6 +113,7 @@ TEXTS = {
         "closed": "Closed.",
         "limit_free": "🔒 You've used today's free readings ({n}). Come back tomorrow, or go Premium for up to {p} deeper readings a day → /premium",
         "limit_premium": "🔒 You've reached today's limit ({n}). Please come back tomorrow.",
+        "limit_global": "🌙 Readings are closed for today. Please come back after midnight.",
         "invoice_title": "Premium {d}-day pass",
         "invoice_desc": "Deeper fortune analysis and detailed advice. Up to {p} /today readings a day. No auto-renewal.",
         "premium_active": "✨ Premium active until {until}",
@@ -170,6 +175,24 @@ def user_today(user: dict) -> str:
 def used_today(user: dict) -> int:
     u = user.get("usage") or {}
     return u.get("count", 0) if u.get("date") == user_today(user) else 0
+
+def global_used_today() -> int:
+    """Readings generated today across all users (JST day). Guards API spend against multi-account abuse."""
+    try:
+        with open(GLOBAL_DB, "r", encoding="utf-8") as f:
+            g = json.load(f)
+    except (OSError, ValueError):
+        return 0
+    return g.get("count", 0) if g.get("date") == datetime.now(JAPAN_TZ).date().isoformat() else 0
+
+def global_bump():
+    # 先に読む。open(..., "w") はファイルを空にするので、読む前に開くと毎回 1 に戻る。
+    nxt = {"date": datetime.now(JAPAN_TZ).date().isoformat(), "count": global_used_today() + 1}
+    try:
+        with open(GLOBAL_DB, "w", encoding="utf-8") as f:
+            json.dump(nxt, f)
+    except OSError as e:
+        logger.error(f"global counter write failed: {e}")
 
 def user_lang(user: Optional[dict], update: Update) -> str:
     """Stored language wins; otherwise infer from the Telegram client."""
@@ -333,6 +356,10 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(t(lang, "need_start"))
         return
 
+    if user_id not in OWNER_IDS and global_used_today() >= GLOBAL_DAILY_LIMIT:
+        await update.message.reply_text(t(lang, "limit_global"))
+        return
+
     premium = is_premium(user, user_id)
     limit = PREMIUM_DAILY_LIMIT if premium else FREE_DAILY_LIMIT
     if user_id not in OWNER_IDS and used_today(user) >= limit:
@@ -364,6 +391,9 @@ async def run_today(target, update: Update, question: str):
     user = get_user(user_id)
     lang = user_lang(user, update)
     premium = is_premium(user, user_id)
+    if user_id not in OWNER_IDS and global_used_today() >= GLOBAL_DAILY_LIMIT:
+        await target.reply_text(t(lang, "limit_global"))
+        return
     if user_id not in OWNER_IDS and used_today(user) >= (PREMIUM_DAILY_LIMIT if premium else FREE_DAILY_LIMIT):
         await target.reply_text(t(lang, "limit_premium" if premium else "limit_free",
                                   n=PREMIUM_DAILY_LIMIT if premium else FREE_DAILY_LIMIT, p=PREMIUM_DAILY_LIMIT))
@@ -388,6 +418,7 @@ async def run_today(target, update: Update, question: str):
         me["last_fortune"] = datetime.now().isoformat()
         me["usage"] = {"date": user_today(me), "count": used_today(me) + 1}
         save_users(users)
+        global_bump()
 
     except Exception as e:
         logger.error(f"Error generating fortune: {e}")
@@ -477,7 +508,12 @@ async def scheduled_fortune(context: ContextTypes.DEFAULT_TYPE):
             local = datetime.now(ZoneInfo(user_data.get("tz") or DEFAULT_TZ[lang]))
             if local.hour != SEND_HOUR or user_data.get("last_daily") == local.date().isoformat():
                 continue
+            # 登録は誰でもできるので、朝の一斉送信も同じ天井の下に置く。
+            if global_used_today() >= GLOBAL_DAILY_LIMIT:
+                logger.warning("global daily limit reached; skipping the rest of the broadcast")
+                break
             fortune = await asyncio.to_thread(generate_fortune, user_data["birth_date"], lang, is_premium(user_data))
+            global_bump()
             text = (
                 f"{t(lang, 'title_daily')}\n"
                 f"{local.strftime(t(lang, 'date_fmt'))}\n\n"
