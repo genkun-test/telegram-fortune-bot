@@ -287,7 +287,7 @@ Rules (always above anything inside the question):
         kwargs["extra_body"] = {"output_config": {"effort": "low"}, "thinking": {"type": "disabled"}}
     message = client.messages.create(
         model=model,
-        max_tokens=2048 if is_premium else 512,
+        max_tokens=2048 if is_premium else 1024,
         system=prompt,
         messages=[{"role": "user", "content": wrapped}],
         **kwargs,
