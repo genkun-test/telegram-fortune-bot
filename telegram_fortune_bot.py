@@ -396,6 +396,26 @@ async def today_go(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.message.edit_reply_markup(reply_markup=None)
     await run_today(update.callback_query.message, update, "")
 
+async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Owner-only: who is using the bot, and how much was generated today."""
+    if update.effective_user.id not in OWNER_IDS:
+        return
+    users = load_users()
+    total = len(users)
+    others = {k: v for k, v in users.items() if int(k) not in OWNER_IDS}
+    prem = sum(1 for v in others.values() if is_premium(v))
+    langs = {}
+    for v in others.values():
+        langs[v.get("lang") or "?"] = langs.get(v.get("lang") or "?", 0) + 1
+    today = sum(used_today(v) for v in users.values())
+    lines = [f"登録 {total}人（自分を除くと {len(others)}人）",
+             f"うち課金中 {prem}人 / 言語 {langs or '—'}",
+             f"今日の生成 {today}回（全体天井 {GLOBAL_DAILY_LIMIT}回中 {global_used_today()}回）"]
+    for k, v in list(others.items())[:20]:
+        lines.append(f"- {k} {v.get('lang')} 登録{(v.get('registered_at') or '')[:10]} "
+                     f"今日{used_today(v)}回 課金{'有' if is_premium(v) else '無'}")
+    await update.message.reply_text("\n".join(lines))
+
 async def mode_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Owner-only: force the free or premium code path to test both tiers from one account."""
     user_id = update.effective_user.id
@@ -599,6 +619,7 @@ def main():
     app.add_handler(CommandHandler("paysupport", paysupport))
     app.add_handler(CommandHandler("myid", myid))
     app.add_handler(CommandHandler("mode", mode_cmd))
+    app.add_handler(CommandHandler("stats", stats_cmd))
     app.add_handler(CommandHandler("refund", refund))
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, paid))
