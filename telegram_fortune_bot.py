@@ -157,6 +157,7 @@ def add_user(user_id: int, birth_date: str, lang: str):
         "last_fortune": prev.get("last_fortune"),
         "premium_until": prev.get("premium_until"),
         "usage": prev.get("usage"),
+        "test_mode": prev.get("test_mode"),
     }
     save_users(users)
 
@@ -164,10 +165,18 @@ def get_user(user_id: int) -> Optional[dict]:
     return load_users().get(str(user_id))
 
 def is_premium(user: Optional[dict], user_id: Optional[int] = None) -> bool:
+    # Owner-only test override (/mode). Only OWNER_IDS can ever set test_mode.
+    mode = (user or {}).get("test_mode")
+    if mode in ("free", "premium"):
+        return mode == "premium"
     if user_id in OWNER_IDS:
         return True
     until = (user or {}).get("premium_until")
     return bool(until) and datetime.fromisoformat(until) > datetime.now()
+
+def bypass_limits(user: Optional[dict], user_id: Optional[int]) -> bool:
+    """Owners skip the per-day cap, unless they are testing a specific tier via /mode."""
+    return user_id in OWNER_IDS and (user or {}).get("test_mode") not in ("free", "premium")
 
 def user_today(user: dict) -> str:
     return datetime.now(ZoneInfo(user.get("tz") or DEFAULT_TZ[user.get("lang") or "ja"])).date().isoformat()
@@ -363,7 +372,7 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     limit = PREMIUM_DAILY_LIMIT if premium else FREE_DAILY_LIMIT
-    if user_id not in OWNER_IDS and used_today(user) >= limit:
+    if not bypass_limits(user, user_id) and used_today(user) >= limit:
         if premium:
             await update.message.reply_text(t(lang, "limit_premium", n=limit))
         else:
@@ -387,6 +396,30 @@ async def today_go(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.message.edit_reply_markup(reply_markup=None)
     await run_today(update.callback_query.message, update, "")
 
+async def mode_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Owner-only: force the free or premium code path to test both tiers from one account."""
+    user_id = update.effective_user.id
+    if user_id not in OWNER_IDS:
+        return
+    users = load_users()
+    user = users.get(str(user_id))
+    if not user:
+        await update.message.reply_text("先に /start で生年月日を登録してください。")
+        return
+    arg = (context.args[0].lower() if context.args else "")
+    if arg not in ("free", "premium", "auto"):
+        now = user.get("test_mode") or "auto"
+        await update.message.reply_text(
+            f"現在のモード: {now}\n"
+            "/mode free — 無料ユーザーとして動く（Haiku・1日3回・全体天井あり）\n"
+            "/mode premium — プレミアムとして動く（Opus・1日5回）\n"
+            "/mode auto — オーナー既定（プレミアム・回数無制限）")
+        return
+    user["test_mode"] = None if arg == "auto" else arg
+    users[str(user_id)] = user
+    save_users(users)
+    await update.message.reply_text(f"モードを {arg} にしました。/today で試せます。")
+
 async def run_today(target, update: Update, question: str):
     user_id = update.effective_user.id
     user = get_user(user_id)
@@ -395,7 +428,7 @@ async def run_today(target, update: Update, question: str):
     if not premium and global_used_today() >= GLOBAL_DAILY_LIMIT:
         await target.reply_text(t(lang, "limit_global"))
         return
-    if user_id not in OWNER_IDS and used_today(user) >= (PREMIUM_DAILY_LIMIT if premium else FREE_DAILY_LIMIT):
+    if not bypass_limits(user, user_id) and used_today(user) >= (PREMIUM_DAILY_LIMIT if premium else FREE_DAILY_LIMIT):
         await target.reply_text(t(lang, "limit_premium" if premium else "limit_free",
                                   n=PREMIUM_DAILY_LIMIT if premium else FREE_DAILY_LIMIT, p=PREMIUM_DAILY_LIMIT))
         return
@@ -565,6 +598,7 @@ def main():
     app.add_handler(CommandHandler("birthday", birthday_cmd))
     app.add_handler(CommandHandler("paysupport", paysupport))
     app.add_handler(CommandHandler("myid", myid))
+    app.add_handler(CommandHandler("mode", mode_cmd))
     app.add_handler(CommandHandler("refund", refund))
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, paid))
