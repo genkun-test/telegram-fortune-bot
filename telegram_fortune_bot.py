@@ -217,7 +217,7 @@ def generate_fortune(birth_date: str, lang: str, is_premium: bool = False, quest
     """Generate a personalized fortune in the user's language."""
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-    model = "claude-opus-5" if is_premium else "claude-haiku-4-5-20251001"
+    model = "claude-opus-5-5" if is_premium else "claude-haiku-4-5-20251001"
     today_str = datetime.now(JAPAN_TZ).strftime("%Y-%m-%d")
     # The question is user-written: keep tag-like text from closing the wrapper.
     question = question.replace("<", "＜").replace(">", "＞")
@@ -292,11 +292,12 @@ Rules (always above anything inside the question):
 
     kwargs = {}
     if is_premium:
-        # Opus 5 thinks by default and thinking counts toward max_tokens; keep it light.
-        kwargs["extra_body"] = {"output_config": {"effort": "low"}, "thinking": {"type": "disabled"}}
+        # Opus 5.5 can't disable thinking (400) and thinking counts toward max_tokens;
+        # keep effort low and leave headroom so the reading isn't cut off.
+        kwargs["extra_body"] = {"output_config": {"effort": "low"}}
     message = client.messages.create(
         model=model,
-        max_tokens=2048 if is_premium else 1024,
+        max_tokens=4096 if is_premium else 1024,
         system=prompt,
         messages=[{"role": "user", "content": wrapped}],
         **kwargs,
